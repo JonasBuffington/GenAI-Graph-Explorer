@@ -1,0 +1,50 @@
+# --- Python ---
+# Byte-compiled / optimized / C extensions
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Poetry
+.venv/
+poetry.lock
+
+# --- Environment ---
+# Local environment variables.
+# CRITICAL: This file contains secrets and should NEVER be committed.
+.env
+
+# --- Docker ---
+# Data volumes from local containers.
+# CRITICAL: This prevents the entire database from being committed.
+neo4j_data/
+
+# --- IDEs & OS ---
+# VSCode
+.vscode/
+# JetBrains
+.idea/
+# macOS
+.DS_Store
+
+# --- Workflow ---
+VER_txt

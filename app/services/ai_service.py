@@ -1,0 +1,76 @@
+import asyncio
+from google.genai import types
+import google.genai as genai
+import json
+from pydantic import BaseModel, ValidationError
+from app.models.graph import Node, Edge, RelationshipType
+from app.core.prompts import EXPAND_NODE_PROMPT
+
+# Pydantic models for parsing the specific JSON structure from the LLM
+class AI_Edge(BaseModel):
+    source_is_original: bool
+    target_node_index: int
+    label: RelationshipType
+
+class AI_Graph(BaseModel):
+    nodes: list[Node]
+    edges: list[AI_Edge]
+
+class AIService:
+    def __init__(self, api_key: str):
+        # CORRECT: Initialize the client instance with the API key.
+        # This is the correct pattern for the google-genai SDK.
+        self.client = genai.Client(api_key=api_key)
+
+    async def generate_expansion(self, source_node: Node, context: str = "") -> tuple[list[Node], list[Edge]]:
+        prompt = EXPAND_NODE_PROMPT.format(
+            node_name=source_node.name,
+            node_description=source_node.description,
+            node_galaxies=source_node.galaxies,
+            existing_nodes_context=context
+        )
+
+        # CORRECT: Use the full class name for the configuration object.
+        generation_config = types.GenerateContentConfig(
+            response_mime_type="application/json"
+        )
+
+        try:
+            # The SDK's generate_content method is synchronous (blocking).
+            # We must run it in a separate thread to avoid blocking our async application.
+            response = await asyncio.to_thread(
+                self.client.models.generate_content,
+                model='gemini-flash-latest',
+                contents=prompt,
+                config=generation_config
+            )
+            
+            ai_graph_data = json.loads(response.text)
+            ai_graph = AI_Graph.model_validate(ai_graph_data)
+
+        except (json.JSONDecodeError, ValidationError) as e:
+            print(f"AI response parsing failed: {e}")
+            print(f"Raw AI response text: {getattr(response, 'text', 'No response text available.')}")
+            return [], []
+        except Exception as e:
+            print(f"An unexpected error occurred with the Gemini API: {e}")
+            return [], []
+
+        # This conversion logic remains correct.
+        new_nodes = ai_graph.nodes
+        new_edges = []
+        for ai_edge in ai_graph.edges:
+            if ai_edge.target_node_index >= len(new_nodes):
+                continue
+            target_node = new_nodes[ai_edge.target_node_index]
+            
+            if ai_edge.source_is_original:
+                source_id = source_node.id
+                target_id = target_node.id
+            else:
+                source_id = target_node.id
+                target_id = source_node.id
+
+            new_edges.append(Edge(source_id=source_id, target_id=target_id, label=ai_edge.label))
+
+        return new_nodes, new_edges
