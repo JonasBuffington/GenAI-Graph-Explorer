@@ -1,4 +1,4 @@
-# CS-Space API
+# API
 
 This repository contains the backend API for the CS-Space project, a personalized, AI-powered roadmap application for computer science skills.
 
