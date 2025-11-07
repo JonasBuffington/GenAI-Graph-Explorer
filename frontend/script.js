@@ -1,5 +1,8 @@
 document.addEventListener('DOMContentLoaded', () => {
-    const API_BASE_URL = 'http://localhost:8000';
+    const isLocalHost = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+    const API_BASE_URL = isLocalHost
+        ? 'http://localhost:8000'
+        : 'https://llm-graph-framework.onrender.com';
     const PROMPT_KEY = 'expand-node';
 
     const overlay = document.getElementById('loading-overlay');
