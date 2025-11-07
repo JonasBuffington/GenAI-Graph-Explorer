@@ -1,20 +1,17 @@
-# Use an official Python runtime as a parent image
 FROM python:3.11-slim
 
-# Set the working directory in the container
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
 WORKDIR /code
 
-# Install poetry
-RUN pip install poetry
+RUN pip install --no-cache-dir poetry
 
-# Copy only the dependency files to leverage Docker cache
 COPY pyproject.toml poetry.lock* ./
+RUN poetry config virtualenvs.create false \
+    && poetry install --only main --no-root
 
-# Install project dependencies
-RUN poetry config virtualenvs.create false && poetry install --only main --no-root
+COPY app ./app
 
-# Copy the rest of the application code
-COPY ./app /code/app
-
-# Command to run the application
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+EXPOSE 8000
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
