@@ -93,3 +93,7 @@ app.include_router(api_router.router)
 @app.get("/")
 async def root():
     return {"message": "Welcome to the GenAI Graph Framework API"}
+
+@app.get("/health", tags=["Health"])
+async def health_check():
+    return {"status": "ok"}

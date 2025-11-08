@@ -10,7 +10,10 @@ class Neo4jDriver:
         if cls._driver is None:
             cls._driver = AsyncGraphDatabase.driver(
                 settings.NEO4J_URI,
-                auth=(settings.NEO4J_USER, settings.NEO4J_PASSWORD)
+                auth=(settings.NEO4J_USER, settings.NEO4J_PASSWORD),
+                max_connection_pool_size=50,
+                connection_timeout=30,
+                max_transaction_retry_time=30,
             )
         return cls._driver
 

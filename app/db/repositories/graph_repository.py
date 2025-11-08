@@ -58,6 +58,57 @@ class GraphRepository:
             if await result.single() is None:
                 raise NodeNotFoundException("One or both nodes for the edge not found.")
             return edge
+    
+    async def add_subgraph(self, nodes: list[Node], edges: list[Edge]) -> None:
+        nodes_payload = [
+            {
+                "id": str(node.id),
+                "name": node.name,
+                "description": node.description,
+                "embedding": node.embedding,
+            }
+            for node in nodes
+        ]
+        edges_payload = [
+            {
+                "source_id": str(edge.source_id),
+                "target_id": str(edge.target_id),
+                "label": edge.label,
+            }
+            for edge in edges
+        ]
+
+        async with self.driver.session() as session:
+            await session.execute_write(
+                self._create_subgraph,
+                nodes_payload,
+                edges_payload,
+            )
+
+    @staticmethod
+    async def _create_subgraph(tx, nodes_payload, edges_payload):
+        if nodes_payload:
+            node_query = """
+            UNWIND $nodes AS nodeData
+            MERGE (n:Concept {id: nodeData.id})
+            ON CREATE SET
+                n.name = nodeData.name,
+                n.description = nodeData.description,
+                n.embedding = nodeData.embedding
+            """
+            node_result = await tx.run(node_query, {"nodes": nodes_payload})
+            await node_result.consume()
+
+        if edges_payload:
+            edge_query = """
+            UNWIND $edges AS edgeData
+            MATCH (source:Concept {id: edgeData.source_id})
+            MATCH (target:Concept {id: edgeData.target_id})
+            CALL apoc.create.relationship(source, edgeData.label, {}, target) YIELD rel
+            RETURN count(rel) as created_edges
+            """
+            edge_result = await tx.run(edge_query, {"edges": edges_payload})
+            await edge_result.consume()
 
     async def update_node(self, node_id: UUID, node_update: NodeUpdate) -> Node | None:
         props_to_update = node_update.model_dump(exclude_unset=True)

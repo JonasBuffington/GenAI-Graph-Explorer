@@ -1,7 +1,8 @@
 # app/services/graph_service.py
-import asyncio
 from uuid import UUID
+import asyncio
 from neo4j import AsyncDriver
+from neo4j.exceptions import SessionExpired, ServiceUnavailable
 from app.models.graph import Node, Graph, Edge, NodeUpdate
 from app.db.repositories.graph_repository import GraphRepository
 from app.core.exceptions import NodeNotFoundException
@@ -29,47 +30,45 @@ class GraphService:
         )
 
     async def create_node(self, node_data: Node) -> Node:
-        embedding_text = _get_embedding_text_for_node(node_data)
-        node_data.embedding = await self.embedding_service.get_embedding(embedding_text)
-        return await self.repo.add_node(node_data)
+        await self._ensure_embedding(node_data)
+        return await self._with_retry(self.repo.add_node, node_data)
 
     async def get_graph(self) -> Graph:
-        return await self.repo.get_full_graph()
+        return await self._with_retry(self.repo.get_full_graph)
 
     async def create_edge(self, edge_data: Edge) -> Edge:
-        return await self.repo.add_edge(edge_data)
+        return await self._with_retry(self.repo.add_edge, edge_data)
 
     async def update_node_properties(self, node_id: UUID, node_update: NodeUpdate) -> Node | None:
-        return await self.repo.update_node(node_id, node_update)
+        return await self._with_retry(self.repo.update_node, node_id, node_update)
     
     async def get_node(self, node_id: UUID) -> Node | None:
-        return await self.repo.get_node_by_id(node_id)
+        return await self._with_retry(self.repo.get_node_by_id, node_id)
 
     async def delete_node(self, node_id: UUID) -> bool:
-        return await self.repo.delete_node_by_id(node_id)
+        return await self._with_retry(self.repo.delete_node_by_id, node_id)
 
     async def delete_edge(self, edge_data: Edge) -> bool:
-        return await self.repo.delete_edge(edge_data)
+        return await self._with_retry(self.repo.delete_edge, edge_data)
 
     async def expand_node(self, node_id: UUID) -> Graph:
-        source_node = await self.repo.get_node_by_id(node_id)
+        source_node = await self._with_retry(self.repo.get_node_by_id, node_id)
         if not source_node:
             raise NodeNotFoundException()
 
-        if not source_node.embedding:
-            embedding_text = _get_embedding_text_for_node(source_node)
-            source_node.embedding = await self.embedding_service.get_embedding(embedding_text)
+        await self._ensure_embedding(source_node)
 
-        structural_nodes = await self.repo.get_1_hop_neighbors(node_id)
+        structural_nodes = await self._with_retry(self.repo.get_1_hop_neighbors, node_id)
         
         excluded_ids = {n.id for n in structural_nodes}
         excluded_ids.add(source_node.id)
         
-        semantic_nodes = await self.repo.find_semantically_similar_nodes(
-            query_vector=source_node.embedding,
-            excluded_node_ids=list(excluded_ids),
-            threshold=SIMILARITY_THRESHOLD,
-            limit=MAX_SEMANTIC_CANDIDATES
+        semantic_nodes = await self._with_retry(
+            self.repo.find_semantically_similar_nodes,
+            source_node.embedding,
+            list(excluded_ids),
+            SIMILARITY_THRESHOLD,
+            MAX_SEMANTIC_CANDIDATES,
         )
 
         final_context_nodes = structural_nodes + semantic_nodes
@@ -88,12 +87,22 @@ class GraphService:
         if not new_nodes:
             return Graph(nodes=[], edges=[])
 
-        await asyncio.gather(
-            *[self.create_node(node) for node in new_nodes]
-        )
-        
-        await asyncio.gather(
-            *[self.repo.add_edge(edge) for edge in new_edges]
-        )
+        await asyncio.gather(*[self._ensure_embedding(node) for node in new_nodes])
+        await self._with_retry(self.repo.add_subgraph, new_nodes, new_edges)
 
         return Graph(nodes=new_nodes, edges=new_edges)
+
+    async def _ensure_embedding(self, node: Node) -> Node:
+        if not node.embedding:
+            embedding_text = _get_embedding_text_for_node(node)
+            node.embedding = await self.embedding_service.get_embedding(embedding_text)
+        return node
+
+    async def _with_retry(self, func, *args, retries: int = 3, delay: float = 0.5, **kwargs):
+        for attempt in range(retries):
+            try:
+                return await func(*args, **kwargs)
+            except (SessionExpired, ServiceUnavailable):
+                if attempt + 1 == retries:
+                    raise
+                await asyncio.sleep(delay * (attempt + 1))
