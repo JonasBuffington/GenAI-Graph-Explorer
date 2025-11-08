@@ -1,9 +1,9 @@
-# GenAI Graph Framework
+# GenAI Graph Explorer
 
 Simple knowledge-graph playground that pairs FastAPI, Neo4j, and Google Gemini. You can create concepts, expand them with RAG-aware LLM calls, and tweak the prompt template right from the UI.
 
 ## Live Links
-- Frontend: https://jonasbuffington.github.io/LLM-graph-framework/
+- Frontend: https://jonasbuffington.github.io/GenAI-Graph-Explorer/
 - API root: https://llm-graph-framework.onrender.com/
 - Swagger: https://llm-graph-framework.onrender.com/docs
 
