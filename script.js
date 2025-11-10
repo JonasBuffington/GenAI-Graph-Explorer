@@ -352,9 +352,9 @@ document.addEventListener('DOMContentLoaded', () => {
             nodeDimensionsIncludeLabels: true,
             rankDir: 'TB',
             ranker: 'tight-tree',
-            rankSep: 140,
-            nodeSep: 50,
-            edgeSep: 50,
+            rankSep: 200,
+            nodeSep: 35,
+            edgeSep: 35,
             padding: 30,
             spacingFactor: 1.1,
             roots: rootIds
