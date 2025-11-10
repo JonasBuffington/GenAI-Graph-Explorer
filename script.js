@@ -74,8 +74,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const cy = cytoscape({
         container: document.getElementById('cy'),
         wheelSensitivity: 0.25,
-        minZoom: 0.25,
-        maxZoom: 2.5,
+        minZoom: 0.125,
+        maxZoom: 5,
         layout: { name: 'preset' },
         style: [
             {
