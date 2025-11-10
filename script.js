@@ -351,7 +351,7 @@ document.addEventListener('DOMContentLoaded', () => {
             animationDuration: 450,
             nodeDimensionsIncludeLabels: true,
             rankDir: 'TB',
-            ranker: 'longest-path',
+            ranker: 'tight-tree',
             rankSep: 140,
             nodeSep: 50,
             edgeSep: 50,
