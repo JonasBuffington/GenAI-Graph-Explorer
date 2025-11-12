@@ -98,7 +98,6 @@ class GraphService:
         return Graph(nodes=new_nodes, edges=new_edges)
 
     async def _ensure_embedding(self, node: Node) -> Node:
-        .
         if not node.embedding:
             embedding_text = _get_embedding_text_for_node(node)
             node.embedding = await self.embedding_service.get_embedding(embedding_text)
