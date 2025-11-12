@@ -26,8 +26,8 @@ class AIService:
         self.client = genai.Client(api_key=api_key)
         self.prompt_service = prompt_service
 
-    async def generate_expansion(self, source_node: Node, context: str = "") -> tuple[list[Node], list[Edge]]:
-        prompt_template = await self.prompt_service.get_prompt("expand-node")
+    async def generate_expansion(self, source_node: Node, user_id: str, context: str = "") -> tuple[list[Node], list[Edge]]:
+        prompt_template = await self.prompt_service.get_prompt("expand-node", user_id)
 
         prompt = prompt_template.format(
             node_name=source_node.name,

@@ -84,7 +84,7 @@ class GraphService:
                 f"{context_items}"
             )
 
-        new_nodes, new_edges = await self.ai_service.generate_expansion(source_node, context=context_str)
+        new_nodes, new_edges = await self.ai_service.generate_expansion(source_node, user_id, context=context_str)
 
         if not new_nodes:
             return Graph(nodes=[], edges=[])
@@ -98,6 +98,7 @@ class GraphService:
         return Graph(nodes=new_nodes, edges=new_edges)
 
     async def _ensure_embedding(self, node: Node) -> Node:
+        .
         if not node.embedding:
             embedding_text = _get_embedding_text_for_node(node)
             node.embedding = await self.embedding_service.get_embedding(embedding_text)
