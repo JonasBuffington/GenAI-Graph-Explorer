@@ -370,9 +370,14 @@ document.addEventListener('DOMContentLoaded', () => {
             animationDuration: 450,
             fit: fit,
             padding: 40,
-            nodeSpacing: 50,
-            edgeLength: 120,
+            nodeSpacing: 60, // Increased spacing for wider trees
+            edgeLength: 150, // Increased length for clarity
             randomize: true,
+            
+            flow: {
+                axis: 'y',
+                minSeparation: 50
+            }
         });
 
         layout.run();
