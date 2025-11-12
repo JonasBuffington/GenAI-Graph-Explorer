@@ -29,36 +29,37 @@ class GraphService:
             prompt_service=self.prompt_service
         )
 
-    async def create_node(self, node_data: Node) -> Node:
+    async def create_node(self, node_data: Node, user_id: str) -> Node:
+        node_data.userId = user_id
         await self._ensure_embedding(node_data)
         return await self._with_retry(self.repo.add_node, node_data)
 
-    async def get_graph(self) -> Graph:
-        return await self._with_retry(self.repo.get_full_graph)
+    async def get_graph(self, user_id: str) -> Graph:
+        return await self._with_retry(self.repo.get_full_graph, user_id)
 
-    async def create_edge(self, edge_data: Edge) -> Edge:
-        return await self._with_retry(self.repo.add_edge, edge_data)
+    async def create_edge(self, edge_data: Edge, user_id: str) -> Edge:
+        return await self._with_retry(self.repo.add_edge, edge_data, user_id)
 
-    async def update_node_properties(self, node_id: UUID, node_update: NodeUpdate) -> Node | None:
-        return await self._with_retry(self.repo.update_node, node_id, node_update)
+    async def update_node_properties(self, node_id: UUID, node_update: NodeUpdate, user_id: str) -> Node | None:
+        return await self._with_retry(self.repo.update_node, node_id, node_update, user_id)
     
-    async def get_node(self, node_id: UUID) -> Node | None:
-        return await self._with_retry(self.repo.get_node_by_id, node_id)
+    async def get_node(self, node_id: UUID, user_id: str) -> Node | None:
+        return await self._with_retry(self.repo.get_node_by_id, node_id, user_id)
 
-    async def delete_node(self, node_id: UUID) -> bool:
-        return await self._with_retry(self.repo.delete_node_by_id, node_id)
+    async def delete_node(self, node_id: UUID, user_id: str) -> bool:
+        return await self._with_retry(self.repo.delete_node_by_id, node_id, user_id)
 
-    async def delete_edge(self, edge_data: Edge) -> bool:
-        return await self._with_retry(self.repo.delete_edge, edge_data)
+    async def delete_edge(self, edge_data: Edge, user_id: str) -> bool:
+        return await self._with_retry(self.repo.delete_edge, edge_data, user_id)
 
-    async def expand_node(self, node_id: UUID) -> Graph:
-        source_node = await self._with_retry(self.repo.get_node_by_id, node_id)
+    async def expand_node(self, node_id: UUID, user_id: str) -> Graph:
+        source_node = await self._with_retry(self.repo.get_node_by_id, node_id, user_id)
         if not source_node:
             raise NodeNotFoundException()
 
         await self._ensure_embedding(source_node)
 
-        structural_nodes = await self._with_retry(self.repo.get_1_hop_neighbors, node_id)
+        structural_nodes = await self._with_retry(self.repo.get_1_hop_neighbors, node_id, user_id)
         
         excluded_ids = {n.id for n in structural_nodes}
         excluded_ids.add(source_node.id)
@@ -67,6 +68,7 @@ class GraphService:
             self.repo.find_semantically_similar_nodes,
             source_node.embedding,
             list(excluded_ids),
+            user_id,
             SIMILARITY_THRESHOLD,
             MAX_SEMANTIC_CANDIDATES,
         )
@@ -87,7 +89,10 @@ class GraphService:
         if not new_nodes:
             return Graph(nodes=[], edges=[])
 
+        for node in new_nodes:
+            node.userId = user_id
         await asyncio.gather(*[self._ensure_embedding(node) for node in new_nodes])
+        
         await self._with_retry(self.repo.add_subgraph, new_nodes, new_edges)
 
         return Graph(nodes=new_nodes, edges=new_edges)

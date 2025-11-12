@@ -75,13 +75,11 @@ async def _initialize_neo4j():
             raise
 
 async def _ensure_vector_index(driver):
-    """Ensure the required vector index exists before serving traffic."""
+    """Ensure the required vector and property indexes exist before serving traffic."""
     async with driver.session() as session:
-        check_index_query = (
-            "SHOW INDEXES YIELD name WHERE toLower(name) = 'concept_embeddings' "
-            "RETURN count(*) > 0 AS indexExists"
-        )
-        result = await session.run(check_index_query)
+        # Check and create vector index
+        check_vector_index_query = "SHOW INDEXES YIELD name WHERE toLower(name) = 'concept_embeddings' RETURN count(*) > 0 AS indexExists"
+        result = await session.run(check_vector_index_query)
         record = await result.single()
         if not (record and record["indexExists"]):
             print("Vector index 'concept_embeddings' not found. Creating it now...")
@@ -97,6 +95,11 @@ async def _ensure_vector_index(driver):
             )
         else:
             print("Vector index 'concept_embeddings' already exists.")
+
+        # Check and create user ID property index
+        print("Ensuring property index on userId exists...")
+        await session.run("CREATE INDEX concept_userId IF NOT EXISTS FOR (n:Concept) ON (n.userId)")
+        print("Database indexes are configured.")
 
 
 app = FastAPI(

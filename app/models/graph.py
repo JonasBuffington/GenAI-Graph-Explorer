@@ -7,6 +7,7 @@ class Node(BaseModel):
     name: str
     description: str
     embedding: list[float] | None = Field(default=None, repr=False)
+    userId: str | None = Field(default=None, repr=False)
 
 class Edge(BaseModel):
     source_id: UUID

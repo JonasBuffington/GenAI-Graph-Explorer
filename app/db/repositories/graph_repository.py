@@ -8,16 +8,16 @@ class GraphRepository:
     def __init__(self, driver: AsyncDriver):
         self.driver = driver
 
-    async def get_full_graph(self) -> Graph:
+    async def get_full_graph(self, user_id: str) -> Graph:
         query = """
-        MATCH (n:Concept)
-        OPTIONAL MATCH (n)-[r]->(m:Concept)
+        MATCH (n:Concept {userId: $userId})
+        OPTIONAL MATCH (n)-[r]->(m:Concept {userId: $userId})
         RETURN collect(DISTINCT n) as nodes, collect(DISTINCT r) as relationships
         """
         async with self.driver.session() as session:
-            result = await session.run(query)
+            result = await session.run(query, {"userId": user_id})
             record = await result.single()
-
+            # ... (rest of the function is unchanged)
             if not record or not record["nodes"]:
                 return Graph(nodes=[], edges=[])
 
@@ -42,10 +42,10 @@ class GraphRepository:
 
             return Graph(nodes=nodes, edges=edges)
 
-    async def add_edge(self, edge: Edge) -> Edge:
+    async def add_edge(self, edge: Edge, user_id: str) -> Edge:
         query = """
-        MATCH (a:Concept {id: $source_id})
-        MATCH (b:Concept {id: $target_id})
+        MATCH (a:Concept {id: $source_id, userId: $userId})
+        MATCH (b:Concept {id: $target_id, userId: $userId})
         CALL apoc.create.relationship(a, $rel_type, {}, b) YIELD rel
         RETURN type(rel) as label
         """
@@ -53,10 +53,11 @@ class GraphRepository:
             result = await session.run(query, {
                 "source_id": str(edge.source_id),
                 "target_id": str(edge.target_id),
-                "rel_type": edge.label
+                "rel_type": edge.label,
+                "userId": user_id
             })
             if await result.single() is None:
-                raise NodeNotFoundException("One or both nodes for the edge not found.")
+                raise NodeNotFoundException("One or both nodes for the edge not found in this workspace.")
             return edge
     
     async def add_subgraph(self, nodes: list[Node], edges: list[Edge]) -> None:
@@ -66,9 +67,11 @@ class GraphRepository:
                 "name": node.name,
                 "description": node.description,
                 "embedding": node.embedding,
+                "userId": node.userId,
             }
             for node in nodes
         ]
+        # ... (rest of the function is unchanged)
         edges_payload = [
             {
                 "source_id": str(edge.source_id),
@@ -94,11 +97,12 @@ class GraphRepository:
             ON CREATE SET
                 n.name = nodeData.name,
                 n.description = nodeData.description,
-                n.embedding = nodeData.embedding
+                n.embedding = nodeData.embedding,
+                n.userId = nodeData.userId
             """
             node_result = await tx.run(node_query, {"nodes": nodes_payload})
             await node_result.consume()
-
+        # ... (edge query is unchanged)
         if edges_payload:
             edge_query = """
             UNWIND $edges AS edgeData
@@ -110,19 +114,19 @@ class GraphRepository:
             edge_result = await tx.run(edge_query, {"edges": edges_payload})
             await edge_result.consume()
 
-    async def update_node(self, node_id: UUID, node_update: NodeUpdate) -> Node | None:
+    async def update_node(self, node_id: UUID, node_update: NodeUpdate, user_id: str) -> Node | None:
         props_to_update = node_update.model_dump(exclude_unset=True)
 
         if not props_to_update:
-            return await self.get_node_by_id(node_id)
+            return await self.get_node_by_id(node_id, user_id)
 
         query = """
-        MATCH (n:Concept {id: $node_id})
+        MATCH (n:Concept {id: $node_id, userId: $userId})
         SET n += $props
         RETURN n
         """
         async with self.driver.session() as session:
-            result = await session.run(query, {"node_id": str(node_id), "props": props_to_update})
+            result = await session.run(query, {"node_id": str(node_id), "props": props_to_update, "userId": user_id})
             record = await result.single()
             return Node.model_validate(record["n"]) if record else None
 
@@ -132,7 +136,8 @@ class GraphRepository:
         ON CREATE SET
             n.name = $name,
             n.description = $description,
-            n.embedding = $embedding
+            n.embedding = $embedding,
+            n.userId = $userId
         RETURN n
         """
         async with self.driver.session() as session:
@@ -141,29 +146,29 @@ class GraphRepository:
                 "name": node.name,
                 "description": node.description,
                 "embedding": node.embedding,
+                "userId": node.userId,
             })
             record = await result.single()
             return Node.model_validate(record["n"])
     
-    async def get_node_by_id(self, node_id: UUID) -> Node | None:
-        query = "MATCH (n:Concept {id: $node_id}) RETURN n"
+    async def get_node_by_id(self, node_id: UUID, user_id: str) -> Node | None:
+        query = "MATCH (n:Concept {id: $node_id, userId: $userId}) RETURN n"
         async with self.driver.session() as session:
-            result = await session.run(query, {"node_id": str(node_id)})
+            result = await session.run(query, {"node_id": str(node_id), "userId": user_id})
             record = await result.single()
             return Node.model_validate(record["n"]) if record else None
 
-    async def delete_node_by_id(self, node_id: UUID) -> bool:
-        query = "MATCH (n:Concept {id: $node_id}) DETACH DELETE n"
+    async def delete_node_by_id(self, node_id: UUID, user_id: str) -> bool:
+        query = "MATCH (n:Concept {id: $node_id, userId: $userId}) DETACH DELETE n"
         async with self.driver.session() as session:
-            result = await session.run(query, {"node_id": str(node_id)})
+            result = await session.run(query, {"node_id": str(node_id), "userId": user_id})
             summary = await result.consume()
             return summary.counters.nodes_deleted > 0
 
-    async def delete_edge(self, edge: Edge) -> bool:
-        # Simplified: No user check.
+    async def delete_edge(self, edge: Edge, user_id: str) -> bool:
         query = """
-        MATCH (a:Concept {id: $source_id})
-        MATCH (b:Concept {id: $target_id})
+        MATCH (a:Concept {id: $source_id, userId: $userId})
+        MATCH (b:Concept {id: $target_id, userId: $userId})
         CALL apoc.cypher.do_it(
             'MATCH (a)-[r:' + $rel_type + ']->(b) DELETE r RETURN count(r) as deleted_count',
             {a: a, b: b}
@@ -174,18 +179,20 @@ class GraphRepository:
             result = await session.run(query, {
                 "source_id": str(edge.source_id),
                 "target_id": str(edge.target_id),
-                "rel_type": edge.label
+                "rel_type": edge.label,
+                "userId": user_id
             })
             record = await result.single()
             return record["was_deleted"] if record else False
     
-    async def get_1_hop_neighbors(self, node_id: UUID) -> list[Node]:
+    async def get_1_hop_neighbors(self, node_id: UUID, user_id: str) -> list[Node]:
         query = """
-        MATCH (source:Concept {id: $node_id})--(neighbor:Concept)
+        MATCH (source:Concept {id: $node_id, userId: $userId})--(neighbor:Concept)
+        WHERE neighbor.userId = $userId
         RETURN DISTINCT neighbor
         """
         async with self.driver.session() as session:
-            result = await session.run(query, {"node_id": str(node_id)})
+            result = await session.run(query, {"node_id": str(node_id), "userId": user_id})
             records = [record async for record in result]
             return [Node.model_validate(record["neighbor"]) for record in records]
 
@@ -193,6 +200,7 @@ class GraphRepository:
         self,
         query_vector: list[float],
         excluded_node_ids: list[UUID],
+        user_id: str,
         threshold: float,
         limit: int
     ) -> list[Node]:
@@ -200,7 +208,7 @@ class GraphRepository:
         query = """
             CALL db.index.vector.queryNodes('concept_embeddings', $limit, $query_vector)
             YIELD node, score
-            WHERE score >= $threshold AND NOT node.id IN $excluded_ids
+            WHERE score >= $threshold AND node.userId = $userId AND NOT node.id IN $excluded_ids
             RETURN node
         """
         async with self.driver.session() as session:
@@ -208,7 +216,8 @@ class GraphRepository:
                 "limit": limit,
                 "query_vector": query_vector,
                 "threshold": threshold,
-                "excluded_ids": excluded_ids_str
+                "excluded_ids": excluded_ids_str,
+                "userId": user_id
             })
             records = [record async for record in result]
             return [Node.model_validate(record["node"]) for record in records]

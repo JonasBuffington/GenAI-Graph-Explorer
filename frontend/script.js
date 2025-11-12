@@ -1,3 +1,4 @@
+// script.js
 document.addEventListener('DOMContentLoaded', () => {
     const isLocalHost = ['localhost', '127.0.0.1'].includes(window.location.hostname);
     const API_BASE_URL = isLocalHost
@@ -6,6 +7,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const PROMPT_KEY = 'expand-node';
     const BACKEND_ESTIMATED_SPINUP_SECONDS = 50;
     const BACKEND_STATUS_POLL_INTERVAL = 10000;
+
+    function getOrSetUserId() {
+        const USER_ID_KEY = 'genai-graph-user-id';
+        let userId = localStorage.getItem(USER_ID_KEY);
+        if (!userId) {
+            userId = self.crypto.randomUUID();
+            localStorage.setItem(USER_ID_KEY, userId);
+        }
+        return userId;
+    }
+    const USER_ID = getOrSetUserId();
 
     const overlay = document.getElementById('loading-overlay');
     const overlayMessage = overlay.querySelector('p');
@@ -466,6 +478,9 @@ document.addEventListener('DOMContentLoaded', () => {
             method: options.method || 'GET',
             headers: options.headers ? { ...options.headers } : {}
         };
+
+        // --- MODIFIED: Add User ID header to all requests ---
+        config.headers['X-User-ID'] = USER_ID;
 
         if (options.body) {
             config.body = options.body;
