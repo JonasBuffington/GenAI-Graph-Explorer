@@ -6,7 +6,7 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from neo4j.exceptions import ServiceUnavailable
 
-from app.api import router as api_router # Updated import
+from app.api import router as api_router
 from app.db.driver import Neo4jDriver
 from app.core.exceptions import NodeNotFoundException
 from app.core.rag_config import VECTOR_DIMENSIONS
@@ -39,7 +39,6 @@ async def lifespan(app: FastAPI):
                 with suppress(asyncio.CancelledError):
                     await startup_task
             else:
-                # Drain any exception to avoid "Task exception was never retrieved" warnings.
                 exc = startup_task.exception()
                 if exc:
                     print(f"Neo4j initialization task completed with error: {exc}")
@@ -77,7 +76,6 @@ async def _initialize_neo4j():
 async def _ensure_vector_index(driver):
     """Ensure the required vector and property indexes exist before serving traffic."""
     async with driver.session() as session:
-        # Check and create vector index
         check_vector_index_query = "SHOW INDEXES YIELD name WHERE toLower(name) = 'concept_embeddings' RETURN count(*) > 0 AS indexExists"
         result = await session.run(check_vector_index_query)
         record = await result.single()
@@ -95,16 +93,14 @@ async def _ensure_vector_index(driver):
             )
         else:
             print("Vector index 'concept_embeddings' already exists.")
-
-        # Check and create user ID property index
         print("Ensuring property index on userId exists...")
         await session.run("CREATE INDEX concept_userId IF NOT EXISTS FOR (n:Concept) ON (n.userId)")
         print("Database indexes are configured.")
 
 
 app = FastAPI(
-    title="GenAI Graph Framework API", # Updated title
-    description="A generalized, AI-powered knowledge graph framework.", # Updated description
+    title="GenAI Graph Framework API",
+    description="A generalized, AI-powered knowledge graph framework.",
     version="1.0.0",
     lifespan=lifespan
 )
@@ -120,7 +116,7 @@ app.add_middleware(
     allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"],
+    allow_headers=["Content-Type", "X-User-ID"], # MODIFIED: Explicitly allow our custom header
 )
 
 @app.exception_handler(NodeNotFoundException)
@@ -130,7 +126,6 @@ async def node_not_found_exception_handler(request: Request, exc: NodeNotFoundEx
         content={"message": exc.message},
     )
 
-# Include the single, unified router
 app.include_router(api_router.router)
 
 @app.get("/")
