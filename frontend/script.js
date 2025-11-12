@@ -8,16 +8,25 @@ document.addEventListener('DOMContentLoaded', () => {
     const BACKEND_ESTIMATED_SPINUP_SECONDS = 50;
     const BACKEND_STATUS_POLL_INTERVAL = 10000;
 
+    // --- MODIFIED: User ID Management ---
+    function generateUUID() { // A more compatible UUID generator
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+            const r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+            return v.toString(16);
+        });
+    }
+
     function getOrSetUserId() {
         const USER_ID_KEY = 'genai-graph-user-id';
         let userId = localStorage.getItem(USER_ID_KEY);
         if (!userId) {
-            userId = self.crypto.randomUUID();
+            userId = generateUUID();
             localStorage.setItem(USER_ID_KEY, userId);
         }
         return userId;
     }
     const USER_ID = getOrSetUserId();
+    // --- END MODIFICATION ---
 
     const overlay = document.getElementById('loading-overlay');
     const overlayMessage = overlay.querySelector('p');
@@ -240,8 +249,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         await runTask('Clearing graph…', async () => {
-            // This is inefficient (O(N) requests). A production system should
-            // use a single API endpoint for batch deletion, e.g., DELETE /graph.
             const nodeIds = cy.nodes().map((node) => node.id());
             for (const nodeId of nodeIds) {
                 await request(`/nodes/${nodeId}`, { method: 'DELETE' });
@@ -358,18 +365,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const layout = cy.layout({
             name: 'dagre',
-            // fit,
-            // animate: true,
-            // animationDuration: 450,
-            // nodeDimensionsIncludeLabels: true,
-            // rankDir: 'TB',
-            // ranker: 'tight-tree',
-            // rankSep: 200,
-            // nodeSep: 35,
-            // edgeSep: 35,
-            // padding: 30,
-            // spacingFactor: 1.1,
-            // roots: rootIds
         });
 
         layout.run();
@@ -479,7 +474,6 @@ document.addEventListener('DOMContentLoaded', () => {
             headers: options.headers ? { ...options.headers } : {}
         };
 
-        // --- MODIFIED: Add User ID header to all requests ---
         config.headers['X-User-ID'] = USER_ID;
 
         if (options.body) {
@@ -530,7 +524,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Initial health check to surface spinner immediately if backend is sleeping
     evaluateHealthStatus('Connecting to backend…');
 
     function showLoading(message = 'Working…') {
