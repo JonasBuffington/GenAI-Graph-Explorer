@@ -88,7 +88,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let promptSnapshot = '';
 
-    cytoscape.use(cola);
+    cytoscape.use(cytoscapeDagre);
 
     const cy = cytoscape({
         container: document.getElementById('cy'),
@@ -328,6 +328,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const existingEdge = cy.getElementById(edgeId);
             if (existingEdge && existingEdge.length) {
                 return;
+
             }
 
             elementsToAdd.push({
@@ -363,14 +364,17 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const layout = cy.layout({
-            name: 'cola',
-            animate: true,
-            animationDuration: 450,
+            name: 'dagre',
             fit: fit,
             padding: 40,
-            nodeSpacing: 50,
-            edgeLength: 120,
-            randomize: true,
+            spacingFactor: 1.2,
+            animate: true,
+            animationDuration: 450,
+            nodeDimensionsIncludeLabels: false,
+            ranker: 'tight-tree',
+            rankDir: 'TB',
+            rankSep: 150,
+            nodeSep: 70,
         });
 
         layout.run();
