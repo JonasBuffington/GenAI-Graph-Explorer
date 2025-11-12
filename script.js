@@ -88,8 +88,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let promptSnapshot = '';
 
-    // --- CORRECTED: Use the correct variable name for the Cola extension ---
-    cytoscape.use(cytoscapeCola);
+    // CORRECTED: The cytoscape.use() call is no longer needed,
+    // as the library registers itself when loaded via script tags.
 
     const cy = cytoscape({
         container: document.getElementById('cy'),
