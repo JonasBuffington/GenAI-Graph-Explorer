@@ -1,3 +1,4 @@
+// script.js
 document.addEventListener('DOMContentLoaded', () => {
     const isLocalHost = ['localhost', '127.0.0.1'].includes(window.location.hostname);
     const API_BASE_URL = isLocalHost
@@ -29,9 +30,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const emptyWorkspaceOverlay = document.getElementById('empty-workspace-overlay');
     const overlayMessage = overlay.querySelector('p');
     const detailsPlaceholder = document.querySelector('.details-placeholder');
-    const detailsList = document.querySelector('.node-details');
-    const detailName = document.getElementById('detail-name');
-    const detailDescription = document.getElementById('detail-description');
+    const detailsListContainer = document.getElementById('details-list-container');
     const expandButton = document.getElementById('expand-node-btn');
     const deleteButton = document.getElementById('delete-node-btn');
     const addNodeForm = document.getElementById('add-node-form');
@@ -83,7 +82,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const state = {
-        selectedNodeId: null
+        selectedNodeIds: []
     };
 
     let promptSnapshot = '';
@@ -170,24 +169,39 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     expandButton.addEventListener('click', async () => {
-        if (!state.selectedNodeId) {
-            return;
-        }
-        await runTask('Expanding node…', async () => {
-            const graph = await request(`/nodes/${state.selectedNodeId}/expand`, { method: 'POST' });
+        if (state.selectedNodeIds.length === 0) return;
+
+        await runTask('Executing action…', async () => {
+            const payload = {
+                action_key: PROMPT_KEY,
+                selected_node_ids: state.selectedNodeIds
+            };
+            const graph = await request('/graph/execute-action', {
+                method: 'POST',
+                body: JSON.stringify(payload)
+            });
             mergeGraph(graph);
             applyLayout({ fit: false });
         });
     });
 
     deleteButton.addEventListener('click', async () => {
-        if (!state.selectedNodeId) {
-            return;
-        }
-        const nodeId = state.selectedNodeId;
-        await runTask('Deleting node…', async () => {
-            await request(`/nodes/${nodeId}`, { method: 'DELETE' });
-            cy.remove(`#${nodeId}`);
+        if (state.selectedNodeIds.length === 0) return;
+
+        const nodeCount = state.selectedNodeIds.length;
+        const confirmation = window.confirm(`Are you sure you want to delete ${nodeCount} node(s)?`);
+        if (!confirmation) return;
+
+        await runTask('Deleting node(s)…', async () => {
+            if (nodeCount > 1) {
+                console.warn("Executing multiple individual DELETE requests. For improved performance, consider implementing a batch-delete endpoint in the backend.");
+            }
+            const deletePromises = state.selectedNodeIds.map(id =>
+                request(`/nodes/${id}`, { method: 'DELETE' })
+            );
+            await Promise.all(deletePromises);
+
+            cy.remove(state.selectedNodeIds.map(id => `#${id}`).join(', '));
             clearSelection();
             applyLayout({ fit: false });
             updateEmptyStateMessage();
@@ -258,7 +272,18 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     cy.on('tap', 'node', (event) => {
-        selectNode(event.target);
+        const tappedNode = event.target;
+        const isShiftPressed = event.originalEvent.shiftKey;
+
+        if (!isShiftPressed) {
+            // Regular click: select only the tapped node
+            cy.nodes().unselect();
+            tappedNode.select();
+        } else {
+            // Shift-click: toggle selection
+            tappedNode.select(!tappedNode.selected());
+        }
+        updateSelectionState();
     });
 
     cy.on('tap', (event) => {
@@ -383,65 +408,69 @@ document.addEventListener('DOMContentLoaded', () => {
         emptyWorkspaceOverlay.classList.toggle('hidden', !isEmpty);
     }
 
-    function selectNode(element) {
-        const node = coerceNode(element);
-        if (!node || node.empty()) {
-            return;
-        }
-
-        cy.nodes().unselect();
-        node.select();
-        state.selectedNodeId = node.id();
-        updateDetailsPanel(node.data());
+    function updateSelectionState() {
+        state.selectedNodeIds = cy.nodes(':selected').map(node => node.id());
+        const selectedNodesData = cy.nodes(':selected').map(node => node.data());
+        updateDetailsPanel(selectedNodesData);
+        updateActionButtons();
     }
 
     function selectNodeById(nodeId) {
-        if (!nodeId) {
-            return;
-        }
-        const nodeCollection = cy.getElementById(nodeId);
-        const node = coerceNode(nodeCollection);
-        if (node) {
-            selectNode(node);
-        }
-    }
-
-    function coerceNode(element) {
-        if (!element) {
-            return null;
-        }
-        if (typeof element.isNode === 'function' && element.isNode()) {
-            return element;
-        }
-        if (typeof element.first === 'function') {
-            const first = element.first();
-            return first && typeof first.isNode === 'function' && first.isNode() ? first : null;
-        }
-        return null;
+        if (!nodeId) return;
+        cy.nodes().unselect();
+        cy.getElementById(nodeId).select();
+        updateSelectionState();
     }
 
     function clearSelection() {
-        state.selectedNodeId = null;
-        cy.nodes().unselect();
-        updateDetailsPanel(null);
+        cy.elements().unselect();
+        updateSelectionState();
         switchTab('details');
     }
 
-    function updateDetailsPanel(nodeData) {
-        if (!nodeData) {
+    function updateDetailsPanel(nodesData) {
+        detailsListContainer.innerHTML = ''; // Clear previous details
+
+        if (!nodesData || nodesData.length === 0) {
             detailsPlaceholder.classList.remove('hidden');
-            detailsList.classList.add('hidden');
-            detailName.textContent = '';
-            detailDescription.textContent = '';
             setActionButtonsEnabled(false);
             return;
         }
 
         detailsPlaceholder.classList.add('hidden');
-        detailsList.classList.remove('hidden');
-        detailName.textContent = nodeData.name || 'Untitled';
-        detailDescription.textContent = nodeData.description || 'No description provided.';
+        
+        nodesData.forEach(nodeData => {
+            const detailElement = document.createElement('dl');
+            detailElement.className = 'node-details';
+            detailElement.innerHTML = `
+                <div>
+                    <dt>Name</dt>
+                    <dd>${nodeData.name || 'Untitled'}</dd>
+                </div>
+                <div>
+                    <dt>Description</dt>
+                    <dd>${nodeData.description || 'No description.'}</dd>
+                </div>
+            `;
+            detailsListContainer.appendChild(detailElement);
+        });
+
         setActionButtonsEnabled(true);
+    }
+
+    function updateActionButtons() {
+        const count = state.selectedNodeIds.length;
+        const isEnabled = count > 0;
+
+        setActionButtonsEnabled(isEnabled);
+
+        if (count <= 1) {
+            expandButton.textContent = 'Expand Node';
+            deleteButton.textContent = 'Delete Node';
+        } else {
+            expandButton.textContent = `Expand Nodes (${count})`;
+            deleteButton.textContent = `Delete Nodes (${count})`;
+        }
     }
 
     function setActionButtonsEnabled(isEnabled) {

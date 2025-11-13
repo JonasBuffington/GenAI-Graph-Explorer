@@ -56,28 +56,46 @@ class GraphService:
     async def delete_edge(self, edge_data: Edge, user_id: str) -> bool:
         return await self._with_retry(self.repo.delete_edge, edge_data, user_id)
 
-    async def expand_node(self, node_id: UUID, user_id: str) -> Graph:
-        source_node = await self._with_retry(self.repo.get_node_by_id, node_id, user_id)
-        if not source_node:
-            raise NodeNotFoundException()
+    async def execute_ai_action(self, action_key: str, selected_node_ids: list[UUID], user_id: str) -> Graph:
+        if not selected_node_ids:
+            return Graph(nodes=[], edges=[])
 
-        await self._ensure_embedding(source_node)
+        source_nodes = [node for node in await asyncio.gather(
+            *[self._with_retry(self.repo.get_node_by_id, node_id, user_id) for node_id in selected_node_ids]
+        ) if node is not None]
 
-        structural_nodes = await self._with_retry(self.repo.get_1_hop_neighbors, node_id, user_id)
+        if not source_nodes:
+            raise NodeNotFoundException("None of the selected nodes were found.")
+
+        await asyncio.gather(*[self._ensure_embedding(node) for node in source_nodes])
+
+        # Gather context from all source nodes
+        all_neighbors = set()
+        all_semantic_nodes = set()
+        excluded_ids = {n.id for n in source_nodes}
+
+        # Collect 1-hop neighbors for all source nodes
+        neighbor_tasks = [self._with_retry(self.repo.get_1_hop_neighbors, node.id, user_id) for node in source_nodes]
+        for neighbors in await asyncio.gather(*neighbor_tasks):
+            for neighbor in neighbors:
+                if neighbor.id not in excluded_ids:
+                    all_neighbors.add(neighbor)
         
-        excluded_ids = {n.id for n in structural_nodes}
-        excluded_ids.add(source_node.id)
-        
-        semantic_nodes = await self._with_retry(
-            self.repo.find_semantically_similar_nodes,
-            source_node.embedding,
-            list(excluded_ids),
-            user_id,
-            SIMILARITY_THRESHOLD,
-            MAX_SEMANTIC_CANDIDATES,
-        )
+        excluded_ids.update(n.id for n in all_neighbors)
 
-        final_context_nodes = structural_nodes + semantic_nodes
+        # Collect semantically similar nodes for all source nodes
+        semantic_tasks = [
+            self._with_retry(
+                self.repo.find_semantically_similar_nodes,
+                node.embedding, list(excluded_ids), user_id, SIMILARITY_THRESHOLD, MAX_SEMANTIC_CANDIDATES
+            ) for node in source_nodes if node.embedding
+        ]
+        for semantic_results in await asyncio.gather(*semantic_tasks):
+            for node in semantic_results:
+                if node.id not in excluded_ids:
+                    all_semantic_nodes.add(node)
+
+        final_context_nodes = list(all_neighbors) + list(all_semantic_nodes)
         
         context_str = ""
         if final_context_nodes:
@@ -88,9 +106,11 @@ class GraphService:
                 f"{context_items}"
             )
 
-        new_nodes, new_edges = await self.ai_service.generate_expansion(source_node, user_id, context=context_str)
+        new_nodes, new_edges = await self.ai_service.generate_graph_modification(
+            source_nodes, user_id, action_key, context=context_str
+        )
 
-        if not new_nodes:
+        if not new_nodes and not new_edges:
             return Graph(nodes=[], edges=[])
 
         for node in new_nodes:

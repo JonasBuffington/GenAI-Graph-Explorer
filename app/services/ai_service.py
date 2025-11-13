@@ -6,18 +6,26 @@ import json
 from pydantic import BaseModel, ValidationError
 from app.models.graph import Node, Edge
 from app.services.prompt_service import PromptService
+from uuid import UUID
 
 # Pydantic models for parsing the specific JSON structure from the LLM.
 class AI_Node(BaseModel):
     name: str
     description: str
 
+class AI_NodeIdentifier(BaseModel):
+    """Identifies a node, either pre-existing or newly created."""
+    is_new: bool
+    index: int # index in the new_nodes list or the original_nodes list
+
 class AI_Edge(BaseModel):
-    source_is_original: bool
-    target_node_index: int
+    """Defines a relationship between any two nodes in the context."""
+    source: AI_NodeIdentifier
+    target: AI_NodeIdentifier
     label: str
 
 class AI_Graph(BaseModel):
+    """The AI's structured output for graph modifications."""
     nodes: list[AI_Node]
     edges: list[AI_Edge]
 
@@ -26,12 +34,22 @@ class AIService:
         self.client = genai.Client(api_key=api_key)
         self.prompt_service = prompt_service
 
-    async def generate_expansion(self, source_node: Node, user_id: str, context: str = "") -> tuple[list[Node], list[Edge]]:
-        prompt_template = await self.prompt_service.get_prompt("expand-node", user_id)
+    async def generate_graph_modification(
+        self,
+        source_nodes: list[Node],
+        user_id: str,
+        prompt_key: str,
+        context: str = ""
+    ) -> tuple[list[Node], list[Edge]]:
+        prompt_template = await self.prompt_service.get_prompt(prompt_key, user_id)
+
+        # Format source nodes for the prompt
+        source_nodes_str = "\n".join(
+            [f'- ID {i}: "{node.name}" (Description: {node.description})' for i, node in enumerate(source_nodes)]
+        )
 
         prompt = prompt_template.format(
-            node_name=source_node.name,
-            node_description=source_node.description,
+            source_nodes_context=source_nodes_str,
             existing_nodes_context=context
         )
 
@@ -61,19 +79,21 @@ class AIService:
         # Convert the AI's response models into our main application models
         new_nodes = [Node(name=ai_node.name, description=ai_node.description) for ai_node in ai_graph.nodes]
         
+        def get_node_id(identifier: AI_NodeIdentifier) -> UUID | None:
+            if identifier.is_new:
+                if 0 <= identifier.index < len(new_nodes):
+                    return new_nodes[identifier.index].id
+            else:
+                if 0 <= identifier.index < len(source_nodes):
+                    return source_nodes[identifier.index].id
+            return None
+
         new_edges = []
         for ai_edge in ai_graph.edges:
-            if ai_edge.target_node_index >= len(new_nodes):
-                continue
-            target_node = new_nodes[ai_edge.target_node_index]
-            
-            if ai_edge.source_is_original:
-                source_id = source_node.id
-                target_id = target_node.id
-            else:
-                source_id = target_node.id
-                target_id = source_node.id
+            source_id = get_node_id(ai_edge.source)
+            target_id = get_node_id(ai_edge.target)
 
-            new_edges.append(Edge(source_id=source_id, target_id=target_id, label=ai_edge.label))
+            if source_id and target_id:
+                new_edges.append(Edge(source_id=source_id, target_id=target_id, label=ai_edge.label))
 
         return new_nodes, new_edges

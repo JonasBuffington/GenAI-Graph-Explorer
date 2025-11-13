@@ -1,6 +1,7 @@
 # app/api/router.py
 from uuid import UUID
 from fastapi import APIRouter, Depends, status, HTTPException, Response, Header
+from pydantic import BaseModel
 from app.models.graph import Node, Graph, Edge, NodeUpdate
 from app.models.prompt import PromptDocument, PromptUpdate
 from app.services.graph_service import GraphService
@@ -11,6 +12,11 @@ from app.services.prompt_service import PromptService
 
 router = APIRouter()
 prompt_service = PromptService()
+
+# --- New Request Model ---
+class ActionRequest(BaseModel):
+    action_key: str
+    selected_node_ids: list[UUID]
 
 # Dependency to extract the User ID from a header
 def get_user_id(x_user_id: str = Header(..., description="Client-generated unique ID for the user workspace.")) -> str:
@@ -42,6 +48,28 @@ async def get_full_graph(
     service: GraphService = Depends(get_service)
 ):
     return await service.get_graph(user_id)
+
+# --- New RPC-Style Endpoint ---
+@router.post("/graph/execute-action", status_code=status.HTTP_201_CREATED, response_model=Graph, tags=["Graph Actions"])
+async def execute_action(
+    request: ActionRequest,
+    user_id: str = Depends(get_user_id),
+    service: GraphService = Depends(get_service)
+):
+    """Executes a complex, prompt-driven action on the graph."""
+    try:
+        created_graph = await service.execute_ai_action(
+            request.action_key, request.selected_node_ids, user_id
+        )
+        if not created_graph.nodes and not created_graph.edges:
+             raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="AI failed to generate a valid graph modification."
+            )
+        return created_graph
+    except NodeNotFoundException as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
 
 @router.post("/nodes", status_code=status.HTTP_201_CREATED, response_model=Node, tags=["Nodes"])
 async def add_node(
@@ -83,23 +111,6 @@ async def delete_node(
     if not await service.delete_node(node_id, user_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Node not found")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
-
-@router.post("/nodes/{node_id}/expand", status_code=status.HTTP_201_CREATED, response_model=Graph, tags=["Nodes"])
-async def expand_node(
-    node_id: UUID,
-    user_id: str = Depends(get_user_id),
-    service: GraphService = Depends(get_service)
-):
-    try:
-        created_graph = await service.expand_node(node_id, user_id)
-        if not created_graph.nodes:
-             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="AI failed to generate valid expansion."
-            )
-        return created_graph
-    except NodeNotFoundException:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Node to expand not found")
 
 @router.post("/edges", status_code=status.HTTP_201_CREATED, response_model=Edge, tags=["Edges"])
 async def add_edge(
