@@ -1,15 +1,18 @@
 # app/api/idempotency.py
 import json
+import logging
 from typing import Callable
 from fastapi import Request, Response, status
 from fastapi.routing import APIRoute
 from starlette.responses import JSONResponse
 from app.core.redis_client import get_redis_client
+from app.core.config import settings
 
 # Define which methods are considered for idempotency
 IDEMPOTENT_METHODS = {"POST", "PUT", "DELETE", "PATCH"}
 CACHE_TTL_SECONDS = 24 * 60 * 60  # 24 hours
 LOCK_TTL_SECONDS = 10 # Short lock to prevent race conditions
+logger = logging.getLogger(__name__)
 
 class IdempotentAPIRoute(APIRoute):
     def get_route_handler(self) -> Callable:
@@ -36,15 +39,21 @@ class IdempotentAPIRoute(APIRoute):
             # 1. Check for a cached response
             cached_response_data = await redis.get(cache_key)
             if cached_response_data:
+                if settings.IDEMPOTENCY_DEBUG:
+                    logger.info("Idempotency cache hit for %s", cache_key)
                 cached = json.loads(cached_response_data)
                 return Response(
                     content=cached["body"],
                     status_code=cached["status_code"],
                     headers=cached["headers"]
                 )
+            elif settings.IDEMPOTENCY_DEBUG:
+                logger.info("Idempotency cache miss for %s", cache_key)
 
             # 2. Lock the key to prevent race conditions
             if not await redis.set(lock_key, "1", nx=True, ex=LOCK_TTL_SECONDS):
+                if settings.IDEMPOTENCY_DEBUG:
+                    logger.info("Idempotency lock contention for %s", cache_key)
                 return JSONResponse(
                     status_code=status.HTTP_409_CONFLICT,
                     content={"detail": "A request with this Idempotency-Key is already in progress."}
@@ -66,11 +75,15 @@ class IdempotentAPIRoute(APIRoute):
                         "body": response_body.decode("utf-8")
                     }
                     await redis.set(cache_key, json.dumps(response_data_to_cache), ex=CACHE_TTL_SECONDS)
+                    if settings.IDEMPOTENCY_DEBUG:
+                        logger.info("Cached response for %s", cache_key)
                 
                 return response
 
             finally:
                 # 5. Release the lock
                 await redis.delete(lock_key)
+                if settings.IDEMPOTENCY_DEBUG:
+                    logger.info("Released idempotency lock for %s", cache_key)
 
         return idempotent_handler

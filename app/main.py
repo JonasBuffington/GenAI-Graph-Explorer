@@ -1,7 +1,7 @@
 # app/main.py
 import asyncio
 from contextlib import asynccontextmanager, suppress
-from fastapi import FastAPI, Request, status
+from fastapi import FastAPI, Request, status, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from neo4j.exceptions import ServiceUnavailable
@@ -151,3 +151,16 @@ async def health_check():
     allowing the service to start even if Neo4j is still initializing.
     """
     return {"status": "ok", "neo4j_ready": neo4j_ready_event.is_set()}
+
+@app.get("/redis-health", tags=["Health"], status_code=status.HTTP_200_OK)
+async def redis_health_check():
+    """Lightweight Redis readiness probe."""
+    redis_client = RedisClient.get_client()
+    try:
+        pong = await redis_client.ping()
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Redis unavailable: {exc}"
+        ) from exc
+    return {"status": "ok", "ping": pong}

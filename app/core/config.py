@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     REDIS_URL: str
     GEMINI_API_KEY: str = ""
     LIMITER_STORAGE_URI: str = ""
+    IDEMPOTENCY_DEBUG: bool = False
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
