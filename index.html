@@ -54,18 +54,11 @@
                 <div class="panel-content">
                     <div id="details-tab" class="tab-pane active">
                         <section class="panel-section" id="details-panel">
-                            <h2>Node</h2>
-                            <p class="muted details-placeholder">Select a node to view its details.</p>
-                            <dl class="node-details hidden">
-                                <div>
-                                    <dt>Name</dt>
-                                    <dd id="detail-name"></dd>
-                                </div>
-                                <div>
-                                    <dt>Description</dt>
-                                    <dd id="detail-description"></dd>
-                                </div>
-                            </dl>
+                            <h2>Node(s) Selected</h2>
+                            <p class="muted details-placeholder">Select a node to view its details. Hold Shift to select multiple nodes.</p>
+                            <div id="details-list-container">
+                                <!-- Node details will be dynamically inserted here -->
+                            </div>
                         </section>
                         <section class="panel-section">
                             <h2>Actions</h2>
