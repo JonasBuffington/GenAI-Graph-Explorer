@@ -90,6 +90,9 @@ document.addEventListener('DOMContentLoaded', () => {
     let promptSnapshot = '';
 
     cytoscape.use(cytoscapeDagre);
+    if (typeof gestureHandling !== 'undefined') {
+        cytoscape.use(gestureHandling);
+    }
 
     const cy = cytoscape({
         container: document.getElementById('cy'),
@@ -163,6 +166,10 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         ]
     });
+
+    if (cy.gestureHandling) {
+        cy.gestureHandling();
+    }
 
     tabButtons.forEach((button) => {
         button.addEventListener('click', () => {
@@ -582,7 +589,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     evaluateHealthStatus('Connecting to backend…');
-    enableGraphTouchLock();
     if (mobileMultiSelectBtn) {
         mobileMultiSelectBtn.addEventListener('click', () => {
             multiSelectMode = !multiSelectMode;
@@ -712,16 +718,4 @@ document.addEventListener('DOMContentLoaded', () => {
         mobileMultiSelectBtn.textContent = multiSelectMode ? 'Multi-select: On' : 'Multi-select: Off';
         mobileMultiSelectBtn.setAttribute('aria-pressed', String(multiSelectMode));
         mobileMultiSelectBtn.classList.toggle('is-active', multiSelectMode);
-    }
-
-    function enableGraphTouchLock() {
-        const cyContainer = document.getElementById('cy');
-        if (!cyContainer) return;
-        ['touchstart', 'touchmove'].forEach((evt) => {
-            cyContainer.addEventListener(evt, (event) => {
-                if (event.touches && event.touches.length > 0) {
-                    event.preventDefault();
-                }
-            }, { passive: false });
-        });
     }

@@ -5,6 +5,7 @@ body, html {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     color: #1d1d1f;
     background: #f5f6f8;
+    overscroll-behavior: none;
 }
 
 .hidden {
@@ -136,6 +137,7 @@ body, html {
     border-radius: 12px;
     box-shadow: 0 6px 18px rgba(26, 33, 68, 0.06);
     overflow: hidden;
+    overscroll-behavior: contain;
 }
 
 #cy {
