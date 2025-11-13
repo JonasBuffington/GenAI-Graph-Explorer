@@ -14,7 +14,7 @@ body, html {
 .app-shell {
     display: flex;
     flex-direction: column;
-    min-height: 100vh;
+    height: 100vh;
 }
 
 .app-header {
