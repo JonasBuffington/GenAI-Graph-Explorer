@@ -163,7 +163,9 @@ async def health_check(request: Request):
     clients should keep polling.
     """
     header_value = request.headers.get(HEALTH_REQUIRED_HEADER)
-    if header_value != HEALTH_REVISION_VALUE:
+    client_host = (request.client.host if request.client else "") or ""
+    is_internal_request = client_host.startswith("10.") or client_host.startswith("127.") or client_host == "::1"
+    if header_value != HEALTH_REVISION_VALUE and not is_internal_request:
         raise HTTPException(status_code=status.HTTP_410_GONE, detail="Client revision expired")
 
     idle_seconds = time.time() - _last_non_health_activity
