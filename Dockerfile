@@ -16,6 +16,9 @@ RUN poetry config virtualenvs.create false \
 
 COPY app ./app
 
+# Copy the Redis config file
+COPY redis.conf /etc/redis/redis.conf
+
 # Copy and prepare the startup script
 COPY start.sh .
 RUN chmod +x ./start.sh

@@ -125,7 +125,6 @@ app.add_middleware(
     allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
-    # MODIFIED: Add 'Idempotency-Key' to the list of allowed headers
     allow_headers=["Content-Type", "X-User-ID", "Idempotency-Key"],
 )
 
