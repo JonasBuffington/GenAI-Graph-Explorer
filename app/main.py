@@ -14,6 +14,7 @@ from app.core.redis_client import RedisClient
 from app.core.exceptions import NodeNotFoundException
 from app.core.rag_config import VECTOR_DIMENSIONS
 from app.core.limiter import limiter
+from app.core.config import settings # Corrected: Add settings import
 
 MAX_RETRIES = 10
 RETRY_DELAY = 3
@@ -140,6 +141,11 @@ app.include_router(api_router.router)
 async def root():
     return {"message": "Welcome to the GenAI Graph Framework API"}
 
-@app.get("/health", tags=["Health"])
+@app.get("/health", tags=["Health"], status_code=status.HTTP_200_OK)
 async def health_check():
+    """
+    Returns the operational status of the service.
+    Crucially, this endpoint always returns a 200 OK to satisfy Render's health check,
+    allowing the service to start even if Neo4j is still initializing.
+    """
     return {"status": "ok", "neo4j_ready": neo4j_ready_event.is_set()}
