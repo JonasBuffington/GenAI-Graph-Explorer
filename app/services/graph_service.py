@@ -70,8 +70,8 @@ class GraphService:
         await asyncio.gather(*[self._ensure_embedding(node) for node in source_nodes])
 
         # Gather context from all source nodes
-        all_neighbors = set()
-        all_semantic_nodes = set()
+        unique_neighbors = {}
+        unique_semantic_nodes = {}
         excluded_ids = {n.id for n in source_nodes}
 
         # Collect 1-hop neighbors for all source nodes
@@ -79,9 +79,9 @@ class GraphService:
         for neighbors in await asyncio.gather(*neighbor_tasks):
             for neighbor in neighbors:
                 if neighbor.id not in excluded_ids:
-                    all_neighbors.add(neighbor)
+                    unique_neighbors[neighbor.id] = neighbor
         
-        excluded_ids.update(n.id for n in all_neighbors)
+        excluded_ids.update(unique_neighbors.keys())
 
         # Collect semantically similar nodes for all source nodes
         semantic_tasks = [
@@ -93,9 +93,9 @@ class GraphService:
         for semantic_results in await asyncio.gather(*semantic_tasks):
             for node in semantic_results:
                 if node.id not in excluded_ids:
-                    all_semantic_nodes.add(node)
+                    unique_semantic_nodes[node.id] = node
 
-        final_context_nodes = list(all_neighbors) + list(all_semantic_nodes)
+        final_context_nodes = list(unique_neighbors.values()) + list(unique_semantic_nodes.values())
         
         context_str = ""
         if final_context_nodes:
