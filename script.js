@@ -16,7 +16,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const PROMPT_KEY = 'expand-node';
     const BACKEND_ESTIMATED_SPINUP_SECONDS = 50;
     const BACKEND_STATUS_POLL_INTERVAL = 10000;
-    const HEALTH_INACTIVITY_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+    const HEALTH_INACTIVITY_TIMEOUT_MS = 5 * 60 * 1000;
 
     function generateUUID() {
         return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
@@ -68,6 +68,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     let backendHealthCheckIntervalId = null;
+    let healthChecksSuspended = false;
     let lastActivityTimestamp = Date.now();
 
     const textMetrics = (() => {
@@ -79,6 +80,19 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         };
     })();
+
+    document.addEventListener('pointerdown', markUserActivity);
+    document.addEventListener('keydown', markUserActivity);
+    window.addEventListener('focus', markUserActivity);
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+            healthChecksSuspended = true;
+            stopBackendWait();
+        } else {
+            markUserActivity();
+            healthChecksSuspended = false;
+        }
+    });
 
     document.addEventListener('pointerdown', markUserActivity);
     document.addEventListener('keydown', markUserActivity);
@@ -527,6 +541,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function request(path, options = {}) {
         markUserActivity();
+        healthChecksSuspended = false;
         const config = {
             method: options.method || 'GET',
             headers: options.headers ? { ...options.headers } : {}
@@ -635,6 +650,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function beginBackendRecovery(messagePrefix = 'Spinning up backend…') {
+        if (shouldSkipHealthCheck()) {
+            return;
+        }
         startBackendWait(messagePrefix);
         if (backendHealthCheckIntervalId) {
             return;
@@ -691,12 +709,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function pingBackend() {
         if (shouldSkipHealthCheck()) {
+            healthChecksSuspended = true;
             stopBackendWait();
             return null;
         }
         try {
-            const response = await fetch(`${API_BASE_URL}/health`, { cache: 'no-store' });
+            const response = await fetch(`${API_BASE_URL}/healthz`, { cache: 'no-store' });
             if (response.ok) {
+                let body = null;
+                try {
+                    body = await response.json();
+                } catch (_) {
+                    body = null;
+                }
+                if (body && body.polling_allowed === false) {
+                    healthChecksSuspended = true;
+                    stopBackendWait();
+                    return null;
+                }
                 markBackendOnline();
                 return true;
             }
@@ -716,9 +746,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function markUserActivity() {
         lastActivityTimestamp = Date.now();
+        healthChecksSuspended = false;
     }
 
     function shouldSkipHealthCheck() {
+        if (healthChecksSuspended) {
+            return true;
+        }
+        if (document.hidden) {
+            return true;
+        }
         return Date.now() - lastActivityTimestamp > HEALTH_INACTIVITY_TIMEOUT_MS;
     }
 
