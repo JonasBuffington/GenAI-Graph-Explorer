@@ -90,8 +90,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let promptSnapshot = '';
 
     cytoscape.use(cytoscapeDagre);
-    if (typeof gestureHandling !== 'undefined') {
-        cytoscape.use(gestureHandling);
+    if (typeof cytoscapeGestureHandling !== 'undefined') {
+        cytoscape.use(cytoscapeGestureHandling);
     }
 
     const cy = cytoscape({
@@ -167,7 +167,7 @@ document.addEventListener('DOMContentLoaded', () => {
         ]
     });
 
-    if (cy.gestureHandling) {
+    if (typeof cy.gestureHandling === 'function') {
         cy.gestureHandling();
     }
 
