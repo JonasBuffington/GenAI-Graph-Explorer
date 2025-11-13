@@ -5,11 +5,15 @@ from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from neo4j.exceptions import ServiceUnavailable
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 from app.api import router as api_router
 from app.db.driver import Neo4jDriver
+from app.core.redis_client import RedisClient
 from app.core.exceptions import NodeNotFoundException
 from app.core.rag_config import VECTOR_DIMENSIONS
+from app.core.limiter import limiter
 
 MAX_RETRIES = 10
 RETRY_DELAY = 3
@@ -43,7 +47,8 @@ async def lifespan(app: FastAPI):
                 if exc:
                     print(f"Neo4j initialization task completed with error: {exc}")
         await Neo4jDriver.close_driver()
-        print("Successfully closed Neo4j connection.")
+        await RedisClient.close_client()
+        print("Successfully closed Neo4j and Redis connections.")
 
 async def _initialize_neo4j():
     """Attempt to verify Neo4j connectivity and ensure the vector index exists."""
@@ -104,6 +109,10 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan
 )
+
+# Add Limiter to the application state
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 allowed_origins = [
     "http://localhost:8000",

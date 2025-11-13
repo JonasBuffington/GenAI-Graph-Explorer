@@ -1,6 +1,6 @@
 # app/api/router.py
 from uuid import UUID
-from fastapi import APIRouter, Depends, status, HTTPException, Response, Header
+from fastapi import APIRouter, Depends, status, HTTPException, Response, Header, Request
 from pydantic import BaseModel
 from app.models.graph import Node, Graph, Edge, NodeUpdate
 from app.models.prompt import PromptDocument, PromptUpdate
@@ -9,8 +9,12 @@ from app.db.driver import get_db_driver
 from neo4j import AsyncDriver
 from app.core.exceptions import NodeNotFoundException
 from app.services.prompt_service import PromptService
+from app.core.limiter import limiter
+from app.api.idempotency import IdempotentAPIRoute
 
 router = APIRouter()
+router.route_class = IdempotentAPIRoute
+
 prompt_service = PromptService()
 
 # --- New Request Model ---
@@ -34,7 +38,9 @@ def get_service(
     return GraphService(driver, prompt_service)
 
 @router.delete("/graph", status_code=status.HTTP_204_NO_CONTENT, tags=["Graph"])
+@limiter.limit("10/minute")
 async def clear_workspace(
+    request: Request,
     user_id: str = Depends(get_user_id),
     service: GraphService = Depends(get_service)
 ):
@@ -49,17 +55,18 @@ async def get_full_graph(
 ):
     return await service.get_graph(user_id)
 
-# --- New RPC-Style Endpoint ---
 @router.post("/graph/execute-action", status_code=status.HTTP_201_CREATED, response_model=Graph, tags=["Graph Actions"])
+@limiter.limit("15/minute")
 async def execute_action(
-    request: ActionRequest,
+    request: Request,
+    action_request: ActionRequest,
     user_id: str = Depends(get_user_id),
     service: GraphService = Depends(get_service)
 ):
     """Executes a complex, prompt-driven action on the graph."""
     try:
         created_graph = await service.execute_ai_action(
-            request.action_key, request.selected_node_ids, user_id
+            action_request.action_key, action_request.selected_node_ids, user_id
         )
         if not created_graph.nodes and not created_graph.edges:
              raise HTTPException(
@@ -72,7 +79,9 @@ async def execute_action(
 
 
 @router.post("/nodes", status_code=status.HTTP_201_CREATED, response_model=Node, tags=["Nodes"])
+@limiter.limit("60/minute")
 async def add_node(
+    request: Request,
     node: Node,
     user_id: str = Depends(get_user_id),
     service: GraphService = Depends(get_service)
@@ -80,7 +89,9 @@ async def add_node(
     return await service.create_node(node, user_id)
 
 @router.get("/nodes/{node_id}", response_model=Node, tags=["Nodes"])
+@limiter.limit("200/minute")
 async def get_node(
+    request: Request,
     node_id: UUID,
     user_id: str = Depends(get_user_id),
     service: GraphService = Depends(get_service)
@@ -91,7 +102,9 @@ async def get_node(
     return node
 
 @router.put("/nodes/{node_id}", response_model=Node, tags=["Nodes"])
+@limiter.limit("60/minute")
 async def update_node(
+    request: Request,
     node_id: UUID,
     node_update: NodeUpdate,
     user_id: str = Depends(get_user_id),
@@ -103,7 +116,9 @@ async def update_node(
     return updated_node
 
 @router.delete("/nodes/{node_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["Nodes"])
+@limiter.limit("60/minute")
 async def delete_node(
+    request: Request,
     node_id: UUID,
     user_id: str = Depends(get_user_id),
     service: GraphService = Depends(get_service)
@@ -113,7 +128,9 @@ async def delete_node(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 @router.post("/edges", status_code=status.HTTP_201_CREATED, response_model=Edge, tags=["Edges"])
+@limiter.limit("120/minute")
 async def add_edge(
+    request: Request,
     edge: Edge,
     user_id: str = Depends(get_user_id),
     service: GraphService = Depends(get_service)
@@ -124,7 +141,9 @@ async def add_edge(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=e.message)
 
 @router.delete("/edges", status_code=status.HTTP_204_NO_CONTENT, tags=["Edges"])
+@limiter.limit("120/minute")
 async def delete_edge(
+    request: Request,
     edge: Edge,
     user_id: str = Depends(get_user_id),
     service: GraphService = Depends(get_service)
