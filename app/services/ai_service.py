@@ -1,12 +1,17 @@
 # app/services/ai_service.py
 import asyncio
+import logging
+import json
+from typing import Any
 from google.genai import types
 import google.genai as genai
-import json
 from pydantic import BaseModel, ValidationError
 from app.models.graph import Node, Edge
 from app.services.prompt_service import PromptService
+from app.services.ai_response_parser import parse_ai_response_text
 from uuid import UUID
+
+logger = logging.getLogger(__name__)
 
 # Pydantic models for parsing the specific JSON structure from the LLM.
 class AI_Node(BaseModel):
@@ -64,16 +69,16 @@ class AIService:
                 contents=prompt,
                 config=generation_config
             )
-            
-            ai_graph_data = json.loads(response.text)
+            raw_text = self._extract_structured_text(response)
+            ai_graph_data = parse_ai_response_text(raw_text)
             ai_graph = AI_Graph.model_validate(ai_graph_data)
 
         except (json.JSONDecodeError, ValidationError) as e:
-            print(f"AI response parsing failed: {e}")
-            print(f"Raw AI response text: {getattr(response, 'text', 'No response text available.')}")
+            logger.error("AI response parsing failed: %s", e)
+            logger.debug("Raw AI response text: %s", getattr(response, "text", "No response text available."))
             return [], []
         except Exception as e:
-            print(f"An unexpected error occurred with the Gemini API: {e}")
+            logger.error("An unexpected error occurred with the Gemini API: %s", e)
             return [], []
 
         # Convert the AI's response models into our main application models
@@ -97,3 +102,37 @@ class AIService:
                 new_edges.append(Edge(source_id=source_id, target_id=target_id, label=ai_edge.label))
 
         return new_nodes, new_edges
+
+    @staticmethod
+    def _extract_structured_text(response: Any) -> str:
+        """
+        Attempt to extract the JSON payload emitted via structured output from the SDK response.
+        """
+        if response is None:
+            return ""
+
+        try:
+            candidates = getattr(response, "candidates", None) or []
+            for candidate in candidates:
+                content = getattr(candidate, "content", None)
+                parts = getattr(content, "parts", None) or []
+                for part in parts:
+                    mime_type = getattr(part, "mime_type", None) or getattr(
+                        getattr(part, "inline_data", None),
+                        "mime_type",
+                        None,
+                    )
+                    if mime_type == "application/json":
+                        text_part = getattr(part, "text", None)
+                        if text_part:
+                            return text_part
+                        inline_data = getattr(part, "inline_data", None)
+                        data = getattr(inline_data, "data", None) if inline_data else None
+                        if isinstance(data, bytes):
+                            return data.decode("utf-8")
+                        if data:
+                            return str(data)
+        except Exception as exc:
+            logger.debug("Falling back to response.text due to extraction error: %s", exc)
+
+        return getattr(response, "text", "") or ""
