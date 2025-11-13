@@ -14,7 +14,6 @@ from app.core.redis_client import RedisClient
 from app.core.exceptions import NodeNotFoundException
 from app.core.rag_config import VECTOR_DIMENSIONS
 from app.core.limiter import limiter
-from app.core.config import settings # Corrected: Add settings import
 
 MAX_RETRIES = 10
 RETRY_DELAY = 3
@@ -113,6 +112,9 @@ app = FastAPI(
 # Add Limiter to the application state
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# Exempt all OPTIONS requests from rate limiting to prevent CORS preflight issues
+app.state.limiter.exempt_methods = ["OPTIONS"]
 
 allowed_origins = [
     "http://localhost:8000",
