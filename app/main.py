@@ -132,7 +132,7 @@ app.add_middleware(
     allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["Content-Type", "X-User-ID", "Idempotency-Key"],
+    allow_headers=["Content-Type", "X-User-ID", "Idempotency-Key", "X-App-Revision"],
 )
 
 @app.exception_handler(NodeNotFoundException)
@@ -162,10 +162,12 @@ async def health_check(request: Request):
     Returns the operational status of the service and indicates whether
     clients should keep polling.
     """
-    header_value = request.headers.get(HEALTH_REQUIRED_HEADER)
     client_host = (request.client.host if request.client else "") or ""
     is_internal_request = client_host.startswith("10.") or client_host.startswith("127.") or client_host == "::1"
-    if header_value != HEALTH_REVISION_VALUE and not is_internal_request:
+    header_value = request.headers.get(HEALTH_REQUIRED_HEADER)
+    require_revision = request.method == "GET" and not is_internal_request
+
+    if require_revision and header_value != HEALTH_REVISION_VALUE:
         raise HTTPException(status_code=status.HTTP_410_GONE, detail="Client revision expired")
 
     idle_seconds = time.time() - _last_non_health_activity
