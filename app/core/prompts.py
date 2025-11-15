@@ -11,8 +11,8 @@ The user has selected the following concept(s):
 
 Based on this, generate a list of 3 to 5 new, related concepts. 
 For each new concept, provide a name and a 1-2 sentence description.
+Each new concept must be a distinct topic that is understandable without the specific context of the original concept.
 These concepts should only mention the original topic if they are still within that original topic.
-(Basically just do not reference the input nodes in the content of new ones, besides the edge labels.)
 Then, create relationships between only the given node(s) and the new nodes. Format should be plain words (e.g., 'works at')
 
 Respond with ONLY a valid JSON object in the following format:
