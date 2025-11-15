@@ -11,7 +11,7 @@ The user has selected the following concept(s):
 
 Based on this, generate a list of 3 to 5 new, related concepts.
 For each new concept, provide a name and a 1-2 sentence description.
-Then, create relationships (edges) between any combination of the original and new concepts.
+Then, create relationships between the given nodes and the new nodes. Format should be plain words (e.g., 'works at')
 
 Respond with ONLY a valid JSON object in the following format:
 {{
