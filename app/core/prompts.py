@@ -9,9 +9,11 @@ The user has selected the following concept(s):
 
 {existing_nodes_context}
 
-Based on this, generate a list of 3 to 5 new, related concepts.
+Based on this, generate a list of 3 to 5 new, related concepts. 
 For each new concept, provide a name and a 1-2 sentence description.
-Then, create relationships between the given nodes and the new nodes. Format should be plain words (e.g., 'works at')
+These concepts should only mention the original topic if they are still within that original topic.
+(for instance, do not mention 'patrick star' in the description of 'starfish' even if 'starfish' came directly from expanding 'patrick star')
+Then, create relationships between only the given node(s) and the new nodes. Format should be plain words (e.g., 'works at')
 
 Respond with ONLY a valid JSON object in the following format:
 {{
