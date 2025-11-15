@@ -3,8 +3,8 @@
 
 EXPAND_NODE_PROMPT = """
 You are an expert knowledge graph assistant.
-Your task is to perform an action on a knowledge graph based on a set of selected concepts.
-The user has selected the following concepts:
+Your task is to perform an action on a knowledge graph based on a set of selected concept(s).
+The user has selected the following concept(s):
 {source_nodes_context}
 
 {existing_nodes_context}
@@ -26,12 +26,7 @@ Respond with ONLY a valid JSON object in the following format:
     {{
       "source": {{ "is_new": false, "index": 0 }},
       "target": {{ "is_new": true, "index": 0 }},
-      "label": "RELATIONSHIP_LABEL"
-    }},
-    {{
-      "source": {{ "is_new": true, "index": 0 }},
-      "target": {{ "is_new": true, "index": 1 }},
-      "label": "ANOTHER_RELATIONSHIP"
+      "label": "Generated Relationship 1"
     }},
     ...
   ]
