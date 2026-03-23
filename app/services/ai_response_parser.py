@@ -98,7 +98,7 @@ def parse_ai_response_text(raw_text: str) -> dict[str, Any]:
     for candidate in _generate_candidates(cleaned):
         for decoder in decoders:
             try:
-                parsed = decoder.decode(candidate)
+                parsed, _ = decoder.raw_decode(candidate)
                 return _remove_forbidden_fields(parsed)
             except JSONDecodeError as exc:
                 last_error = exc

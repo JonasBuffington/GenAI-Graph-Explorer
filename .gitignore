@@ -49,3 +49,6 @@ app/data/
 
 # --- Workflow ---
 VER_txt
+
+# --- Docs ---
+example_showcase_prompt.txt
