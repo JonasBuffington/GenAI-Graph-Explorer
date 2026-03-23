@@ -65,7 +65,7 @@ class AIService:
         try:
             response = await asyncio.to_thread(
                 self.client.models.generate_content,
-                model='gemini-3-flash-preview',
+                model='Gemini 3.1 Flash-Lite Preview',
                 contents=prompt,
                 config=generation_config
             )
